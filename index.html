@@ -1,188 +1,830 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Offline Inspection Tablet Demo</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart MOM Generator – Technical and Maintenance</title>
 
-<!-- Chart -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- html2pdf.js for direct PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;600;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
 
-<!-- PDF -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Firebase SDKs (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js"></script>
 
-<style>
-body{font-family:Arial;background:#f4f6f8;margin:0}
-header{background:#1e40af;color:#fff;padding:12px;text-align:center;font-weight:bold}
-section{padding:12px}
-input,select,button{width:100%;padding:8px;margin:4px 0}
-button{background:#1e40af;color:#fff;border:none;border-radius:6px}
-button:disabled{opacity:0.4}
-.card{background:#fff;padding:12px;border-radius:8px;margin-bottom:12px}
-table{width:100%;border-collapse:collapse;font-size:12px}
-th,td{border-bottom:1px solid #ddd;padding:6px;text-align:center}
-.status-Normal{color:green;font-weight:bold}
-.status-Alert{color:orange;font-weight:bold}
-.status-Danger{color:red;font-weight:bold}
-.tab{display:none}
-.tab.active{display:block}
-</style>
+    <style>
+        body { font-family: 'Noto Sans', sans-serif; background: #F3F4F6; }
+        .font-jp { font-family: 'Noto Serif JP', serif; }
+
+        /* Document Control Styling */
+        .hanko-box {
+            width: 70px; height: 70px; border: 1px solid #374151;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .hanko-circle {
+            width: 50px; height: 50px; border: 2px solid #DC2626; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 8px; font-weight: bold; color: #DC2626; opacity: 0.15;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+        }
+
+        .rich-content-preview {
+            word-wrap: break-word;
+            min-height: 60px;
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+        .rich-content-preview img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+            border: 1px solid #e5e7eb;
+            display: block;
+        }
+
+        .editable-cell:focus {
+            background-color: white !important;
+            box-shadow: inset 0 0 0 2px #3b82f6;
+            border-radius: 4px;
+            padding: 4px;
+            outline: none;
+        }
+
+        /* Status: Item Completed */
+        .row-done {
+            opacity: 0.5;
+            filter: grayscale(0.8);
+            background-color: #f1f5f9 !important;
+            pointer-events: none;
+        }
+        .row-done .no-disable {
+            pointer-events: auto !important;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; }
+            .print-only { display: block !important; }
+        }
+        .print-only { display: none; }
+
+        /* Modal Overlay */
+        .modal-backdrop {
+            background-color: rgba(0,0,0,0.6);
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: white;
+            width: 95%;
+            max-width: 950px;
+            max-height: 95vh;
+            overflow-y: auto;
+            border-radius: 16px;
+            padding: 24px;
+        }
+        #drawingCanvas {
+            border: 2px dashed #cbd5e1;
+            cursor: crosshair;
+            background-color: #f8fafc;
+            max-width: 100%;
+        }
+        
+        #loadingOverlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.9);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        /* Toolbars */
+        .editor-toolbar button {
+            padding: 6px 12px;
+            border-radius: 6px;
+            background: #f1f5f9;
+            font-weight: bold;
+            font-size: 14px;
+            border: 1px solid #cbd5e1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .editor-toolbar button:hover { background: #e2e8f0; }
+
+        #modalRichText {
+            border: 2px solid #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            background: #fff;
+            outline: none;
+        }
+        #modalRichText:focus { border-color: #3b82f6; }
+        #modalRichText img {
+            max-width: 400px;
+            height: auto;
+            display: block;
+            margin: 15px 0;
+            border: 1px solid #ddd;
+        }
+
+        #syncStatus {
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        /* Gantt chart elements */
+        .gantt-bar-bg {
+            background-color: #e2e8f0;
+            height: 12px;
+            border-radius: 6px;
+            overflow: hidden;
+            width: 100%;
+            position: relative;
+        }
+        .gantt-bar-fill {
+            background: linear-gradient(90deg, #3b82f6, #2563eb);
+            height: 100%;
+            transition: width 0.8s ease-in-out;
+        }
+    </style>
 </head>
 
-<body>
+<body class="text-gray-900 antialiased">
 
-<header>OFFLINE INSPECTION TABLET DEMO</header>
+    <!-- List for autocompletion -->
+    <datalist id="discipline-list">
+        <option value="Mechanical">
+        <option value="E&I">
+        <option value="Civil">
+        <option value="Process">
+        <option value="HSE">
+        <option value="Procurement">
+        <option value="Logistics">
+        <option value="QA/QC">
+        <option value="Commissioning">
+    </datalist>
 
-<section>
-<button onclick="showTab('entry')">Nhập liệu</button>
-<button onclick="showTab('dashboard')">Dashboard</button>
-</section>
+    <!-- Loading Indicators -->
+    <div id="loadingOverlay">
+        <div class="animate-spin rounded-full h-14 w-14 border-b-4 border-blue-600 mb-4"></div>
+        <p class="font-bold text-blue-600 text-lg" id="loadingText">Processing...</p>
+    </div>
 
-<!-- TAB ENTRY -->
-<section id="entry" class="tab active">
-<div class="card">
-<h3>Nhập liệu kiểm tra</h3>
+    <!-- APP HEADER -->
+    <header class="bg-slate-800 text-white shadow-lg sticky top-0 z-50 no-print">
+        <div class="max-w-7xl mx-auto h-16 px-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 px-3 py-1.5 rounded-lg shadow-inner font-bold text-xl tracking-tighter italic">MOM</div>
+                <div class="flex flex-col">
+                    <h1 class="font-bold text-sm hidden sm:block">Smart Generator v4.9</h1>
+                    <div id="syncStatus" class="bg-slate-700 text-slate-400">Initializing Sync...</div>
+                </div>
+            </div>
+            <div class="flex gap-2 sm:gap-4">
+                <button id="btn-editor" onclick="window.switchTab('editor')" class="border-b-2 border-blue-400 py-1 font-semibold text-xs sm:text-sm transition-all">Editor</button>
+                <button id="btn-analytics" onclick="window.switchTab('analytics')" class="text-slate-300 py-1 hover:text-white font-semibold text-xs sm:text-sm transition-all">Analytics</button>
+                
+                <div class="h-6 w-px bg-slate-600 self-center mx-1"></div>
+                
+                <button onclick="window.saveToPC()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-[10px] font-bold transition-all hidden sm:block" title="Save JSON to local drive">Save File</button>
+                <button onclick="document.getElementById('importFile').click()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-[10px] font-bold transition-all hidden sm:block" title="Open JSON from local drive">Open File</button>
+                <input type="file" id="importFile" accept=".json" class="hidden" onchange="window.loadFromPC(this)">
 
-<select id="device">
-<option>TK-101</option>
-<option>HE-202</option>
-<option>VS-305</option>
-</select>
+                <button onclick="window.exportToMOM()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded font-bold transition-all shadow-lg flex items-center gap-2 text-xs sm:text-sm">
+                    <span>Export PDF</span>
+                </button>
+            </div>
+        </div>
+    </header>
 
-<input id="inspector" placeholder="Tên kỹ thuật viên">
-<input id="thickness" type="number" step="0.1" placeholder="Độ dày (mm)">
+    <main class="max-w-7xl mx-auto p-4 sm:p-8 no-print">
 
-<button onclick="saveData()">LƯU DỮ LIỆU</button>
-</div>
-</section>
+        <!-- EDITOR VIEW -->
+        <section id="section-editor" class="space-y-8">
+            <!-- Project Header Info -->
+            <div class="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
+                <h2 class="font-bold mb-6 text-xl text-blue-900 font-jp flex items-center gap-2">
+                    <span class="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+                    I. Meeting Header / 基本情報
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="space-y-1">
+                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest">Project Name</label>
+                        <input id="in-project" oninput="window.saveHeaderData()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="TOSOH Plant Project...">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest">MOM Number</label>
+                        <input id="in-mom-no" oninput="window.saveHeaderData()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="MOM-2025-001">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest">Meeting Date</label>
+                        <input id="in-date" type="date" oninput="window.saveHeaderData()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                    </div>
+                    <div class="space-y-1 md:col-span-2">
+                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest">Participants</label>
+                        <input id="in-attendees" oninput="window.saveHeaderData()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Names and Companies...">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest">Location</label>
+                        <input id="in-location" oninput="window.saveHeaderData()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Site Office / Online...">
+                    </div>
+                </div>
+            </div>
 
-<!-- TAB DASHBOARD -->
-<section id="dashboard" class="tab">
-<div class="card">
-<canvas id="trendChart" height="150"></canvas>
-</div>
+            <!-- Dynamic Meeting Content -->
+            <div class="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 border-b pb-4">
+                    <h2 class="font-bold text-xl text-blue-900 font-jp flex items-center gap-2">
+                        <span class="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+                        II. Action Items Log / 協議事項
+                    </h2>
+                    <button onclick="window.addRow()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-bold shadow-md transition-all flex items-center gap-2">
+                        <span>+ Add New Row</span>
+                    </button>
+                </div>
 
-<div class="card">
-<h3>Lịch sử kiểm tra</h3>
-<table>
-<thead>
-<tr>
-<th>Ngày</th>
-<th>Thiết bị</th>
-<th>Trạng thái</th>
-<th>Report</th>
-</tr>
-</thead>
-<tbody id="tableBody"></tbody>
-</table>
-</div>
-</section>
+                <div class="overflow-x-auto rounded-xl border border-slate-200">
+                    <table class="w-full text-sm border-collapse bg-white">
+                        <thead class="bg-slate-50 text-slate-500">
+                            <tr>
+                                <th class="p-4 border text-center w-14 text-[10px] uppercase font-black">Done</th>
+                                <th class="p-4 border text-center w-14 font-black">No</th>
+                                <th class="p-4 border min-w-[320px] text-left font-black">Issue Detail & Evidence</th>
+                                <th class="p-4 border w-24 text-center font-black">Severity</th>
+                                <th class="p-4 border min-w-[320px] text-left font-black">Agreed Conclusion</th>
+                                <th class="p-4 border w-28 text-center font-black">Progress</th>
+                                <th class="p-4 border w-40 font-black">Person in Charge</th>
+                                <th class="p-4 border w-12"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="item-tbody">
+                            <!-- JS will populate rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
 
-<script>
-/* ===== LOCAL STORAGE DB ===== */
-function getDB(){
-  return JSON.parse(localStorage.getItem("inspectionDB")||"[]");
-}
-function saveDB(db){
-  localStorage.setItem("inspectionDB",JSON.stringify(db));
-}
+        <!-- ANALYTICS VIEW -->
+        <section id="section-analytics" class="hidden animate-fade-in space-y-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="bg-white p-8 rounded-2xl border border-gray-100 shadow-lg">
+                    <h3 class="font-bold mb-6 text-center font-jp text-slate-800 text-lg underline decoration-blue-500 decoration-4 underline-offset-8 text-blue-700 uppercase">Issue Severity Distribution</h3>
+                    <div class="chart-container"><canvas id="chartSeverity"></canvas></div>
+                </div>
+                <div class="bg-white p-8 rounded-2xl border border-gray-100 shadow-lg">
+                    <h3 class="font-bold mb-6 text-center font-jp text-slate-800 text-lg underline decoration-blue-500 decoration-4 underline-offset-8 text-blue-700 uppercase">Workload by Discipline</h3>
+                    <div class="chart-container"><canvas id="chartDiscipline"></canvas></div>
+                </div>
+            </div>
 
-/* ===== TAB ===== */
-function showTab(id){
-  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-  if(id==="dashboard") loadDashboard();
-}
+            <!-- Grouped Pending Tasks Table -->
+            <div class="bg-white p-8 rounded-2xl border border-gray-100 shadow-xl">
+                <h3 class="font-bold mb-6 font-jp text-xl text-blue-900 flex items-center gap-3 border-b pb-4">
+                    <span class="bg-blue-600 text-white w-8 h-8 flex items-center justify-center rounded-lg text-sm shadow-md">📊</span>
+                    Pending Tasks Dashboard (mini-Gantt by PIC)
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm border-collapse">
+                        <thead class="bg-slate-50 text-slate-500 uppercase tracking-tighter text-[11px]">
+                            <tr>
+                                <th class="p-4 text-left font-black w-48 border-b-2 border-slate-200">PIC Name</th>
+                                <th class="p-4 text-left font-black border-b-2 border-slate-200">Issue Title & Relative Progress</th>
+                                <th class="p-4 text-center font-black w-32 border-b-2 border-slate-200">Task Count</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gantt-summary-body" class="divide-y divide-slate-100">
+                            <!-- Population by PIC grouping -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
 
-/* ===== STATUS ===== */
-function getStatus(t){
-  if(t<8.5) return "Danger";
-  if(t<9.5) return "Alert";
-  return "Normal";
-}
+    <!-- RICH CONTENT MODAL -->
+    <div id="richModal" class="modal-backdrop no-print">
+        <div class="modal-content shadow-2xl">
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <h3 id="modalTitle" class="text-2xl font-black text-slate-800 flex items-center gap-3">
+                    <span class="bg-blue-600 text-white w-10 h-10 flex items-center justify-center rounded-xl text-lg shadow-lg italic">✎</span>
+                    Edit Content
+                </h3>
+                <button onclick="window.closeRichModal()" class="text-slate-400 hover:text-slate-800 transition-colors text-3xl">✕</button>
+            </div>
+            
+            <div class="space-y-6">
+                <!-- Word-like Toolbar -->
+                <div class="editor-toolbar flex flex-wrap items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 shadow-inner">
+                    <div class="flex gap-1">
+                        <button onclick="window.formatText('bold')" class="font-serif">B</button>
+                        <button onclick="window.formatText('italic')" class="italic">I</button>
+                        <button onclick="window.formatText('underline')" class="underline">U</button>
+                    </div>
+                    <div class="h-8 w-px bg-slate-300"></div>
+                    <!-- Highline feature -->
+                    <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                        <label class="text-[10px] font-black text-blue-600 uppercase">Highline</label>
+                        <button onclick="window.formatText('hiliteColor', '#FFFF00')" class="w-6 h-6 rounded bg-yellow-400 border border-yellow-500 p-0"></button>
+                        <input type="color" onchange="window.formatText('hiliteColor', this.value)" class="w-8 h-8 p-0 border-0 cursor-pointer bg-transparent">
+                    </div>
+                    <div class="h-8 w-px bg-slate-300"></div>
+                    <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm ml-auto">
+                        <label class="text-[10px] font-black text-slate-400 uppercase">Text Color</label>
+                        <input type="color" onchange="window.formatText('foreColor', this.value)" class="w-8 h-8 p-0 border-0 cursor-pointer bg-transparent">
+                    </div>
+                </div>
 
-/* ===== SAVE DATA ===== */
-function saveData(){
-  let db=getDB();
-  let rec={
-    id:Date.now(),
-    date:new Date().toLocaleDateString(),
-    device:device.value,
-    inspector:inspector.value,
-    thickness:Number(thickness.value),
-    status:getStatus(Number(thickness.value)),
-    pdf:false
-  };
-  db.push(rec);
-  saveDB(db);
-  alert("✅ Đã lưu vào tablet");
-  thickness.value="";
-}
+                <!-- Main editable area -->
+                <div id="modalRichText" contenteditable="true" class="min-h-[300px] shadow-inner prose prose-slate max-w-none"></div>
 
-/* ===== DASHBOARD ===== */
-function loadDashboard(){
-  let db=getDB();
-  let body=document.getElementById("tableBody");
-  body.innerHTML="";
-  let chartData={};
+                <!-- Evidence Annotation -->
+                <div class="bg-blue-50 p-6 rounded-2xl border-2 border-dashed border-blue-200">
+                    <div class="flex flex-col xl:flex-row gap-8 items-start">
+                        <div class="flex flex-col gap-4 w-full xl:w-56">
+                            <label class="text-xs font-black text-blue-800 uppercase tracking-widest">Image Evidence</label>
+                            <input type="file" id="imageUploader" accept="image/*" class="text-xs">
+                            <div class="grid grid-cols-2 gap-2 mt-2">
+                                <button onclick="window.clearCanvas()" class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-600">Reset</button>
+                                <button onclick="window.insertAnnotatedImage()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-black shadow-lg">Attach</button>
+                            </div>
+                        </div>
+                        <canvas id="drawingCanvas" width="800" height="500" class="max-w-full h-auto bg-white border-2 border-white shadow-xl rounded-xl cursor-crosshair"></canvas>
+                    </div>
+                </div>
 
-  db.forEach(r=>{
-    if(!chartData[r.device]) chartData[r.device]=[];
-    chartData[r.device].push(r.thickness);
+                <div class="flex justify-end gap-4 pt-6 border-t mt-6">
+                    <button onclick="window.closeRichModal()" class="px-8 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold hover:bg-slate-200">Cancel</button>
+                    <button onclick="window.saveRichContent()" class="px-10 py-3 bg-blue-600 text-white rounded-xl font-black shadow-xl hover:bg-blue-700 transition-all transform hover:scale-105 active:scale-95">Save & Sync to Cloud</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-    let tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td>${r.date}</td>
-      <td>${r.device}</td>
-      <td class="status-${r.status}">${r.status}</td>
-      <td>
-        ${r.pdf
-          ? `<button onclick="alert('File đã nằm trong Downloads')">📂 Mở</button>`
-          : `<button onclick="printPDF(${r.id})">🖨 In</button>`
-        }
-      </td>`;
-    body.appendChild(tr);
-  });
+    <div id="print-area" style="position: absolute; left: -9999px; top: -9999px;"></div>
 
-  drawChart(chartData);
-}
+    <script>
+        /* ========= FIREBASE & PERSISTENCE ========= */
+        const firebaseConfig = JSON.parse(__firebase_config);
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'mom-generator-v4';
+        
+        let userId = null;
+        window.items = [];
+        window.editingIndex = null;
+        window.editingField = null;
 
-/* ===== PDF ===== */
-function printPDF(id){
-  let db=getDB();
-  let r=db.find(x=>x.id===id);
-  const {jsPDF}=window.jspdf;
-  let pdf=new jsPDF();
-  pdf.text("INSPECTION REPORT",20,20);
-  pdf.text(`Date: ${r.date}`,20,40);
-  pdf.text(`Device: ${r.device}`,20,50);
-  pdf.text(`Inspector: ${r.inspector}`,20,60);
-  pdf.text(`Thickness: ${r.thickness} mm`,20,70);
-  pdf.text(`Status: ${r.status}`,20,80);
-  pdf.save(`Report_${r.device}_${r.id}.pdf`);
-  r.pdf=true;
-  saveDB(db);
-  loadDashboard();
-}
+        /* ========= NAMING LOGIC (dd_mm_yy) ========= */
+        const getBaseFilename = () => {
+            const dateInput = document.getElementById('in-date').value;
+            let d = dateInput ? new Date(dateInput) : new Date();
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const yy = String(d.getFullYear()).substring(2);
+            return `MOM_${dd}_${mm}_${yy}`;
+        };
 
-/* ===== CHART ===== */
-let chart;
-function drawChart(data){
-  let ctx=document.getElementById("trendChart");
-  if(chart) chart.destroy();
-  chart=new Chart(ctx,{
-    type:"line",
-    data:{
-      labels:data[Object.keys(data)[0]]?.map((_,i)=>i+1)||[],
-      datasets:Object.keys(data).map(d=>({
-        label:d,
-        data:data[d],
-        borderWidth:2
-      }))
-    }
-  });
-}
-</script>
+        /* ========= AUTH & CLOUD SYNC ========= */
+        const initSync = async () => {
+            const status = document.getElementById('syncStatus');
+            status.innerText = "Connecting...";
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await auth.signInWithCustomToken(__initial_auth_token);
+                } else {
+                    await auth.signInAnonymously();
+                }
+            } catch (err) {
+                console.error("Auth Offline", err);
+                status.innerText = "Offline Mode";
+            }
+        };
 
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                userId = user.uid;
+                const status = document.getElementById('syncStatus');
+                status.innerText = "Sync Active";
+                status.className = "bg-emerald-900 text-emerald-300 font-bold px-3 py-0.5 rounded-full text-[10px]";
+                startRealtimeSync();
+            }
+        });
+
+        const startRealtimeSync = () => {
+            db.doc(`artifacts/${appId}/users/${userId}/data/header`).onSnapshot(doc => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (!document.activeElement.id || !document.activeElement.id.startsWith('in-')) {
+                        document.getElementById('in-project').value = data.project || "";
+                        document.getElementById('in-mom-no').value = data.momNo || "";
+                        document.getElementById('in-date').value = data.date || "";
+                        document.getElementById('in-attendees').value = data.attendees || "";
+                        document.getElementById('in-location').value = data.location || "";
+                    }
+                }
+            });
+
+            db.collection(`artifacts/${appId}/users/${userId}/items`).onSnapshot(snapshot => {
+                const newItems = [];
+                snapshot.forEach(doc => { newItems.push({ id: doc.id, ...doc.data() }); });
+                window.items = newItems.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+                window.renderTable();
+                window.updateCharts();
+            });
+        };
+
+        window.saveHeaderData = async () => {
+            if (!userId) return;
+            const data = {
+                project: document.getElementById('in-project').value,
+                momNo: document.getElementById('in-mom-no').value,
+                date: document.getElementById('in-date').value,
+                attendees: document.getElementById('in-attendees').value,
+                location: document.getElementById('in-location').value
+            };
+            await db.doc(`artifacts/${appId}/users/${userId}/data/header`).set(data, { merge: true });
+        };
+
+        window.saveItemToCloud = async (item) => {
+            if (!userId || !item.id) return;
+            await db.doc(`artifacts/${appId}/users/${userId}/items/${item.id}`).set(item, { merge: true });
+        };
+
+        window.deleteItemFromCloud = async (itemId) => {
+            if (!userId) return;
+            await db.doc(`artifacts/${appId}/users/${userId}/items/${itemId}`).delete();
+        };
+
+        /* ========= LOCAL FILESYSTEM (.JSON) ========= */
+        window.saveToPC = () => {
+            const data = {
+                header: {
+                    project: document.getElementById('in-project').value,
+                    momNo: document.getElementById('in-mom-no').value,
+                    date: document.getElementById('in-date').value,
+                    attendees: document.getElementById('in-attendees').value,
+                    location: document.getElementById('in-location').value
+                },
+                items: window.items
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${getBaseFilename()}.json`;
+            a.click();
+        };
+
+        window.loadFromPC = (input) => {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            const loading = document.getElementById('loadingOverlay');
+            loading.style.display = 'flex';
+            document.getElementById('loadingText').innerText = "Importing JSON & Syncing...";
+
+            reader.onload = async (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    document.getElementById('in-project').value = data.header.project || "";
+                    document.getElementById('in-mom-no').value = data.header.momNo || "";
+                    document.getElementById('in-date').value = data.header.date || "";
+                    document.getElementById('in-attendees').value = data.header.attendees || "";
+                    document.getElementById('in-location').value = data.header.location || "";
+                    await window.saveHeaderData();
+                    for (const item of data.items) { await window.saveItemToCloud(item); }
+                    loading.style.display = 'none';
+                } catch (err) {
+                    console.error("Import Error", err);
+                    loading.style.display = 'none';
+                    alert("Error loading file. Check format.");
+                }
+            };
+            reader.readAsText(file);
+        };
+
+        /* ========= RICH TEXT & ANNOTATION LOGIC ========= */
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false, lastX = 0, lastY = 0;
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            lastX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            lastY = (e.clientY - rect.top) * (canvas.height / rect.height);
+        });
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const cx = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const cy = (e.clientY - rect.top) * (canvas.height / rect.height);
+            ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(cx, cy);
+            ctx.strokeStyle = '#EF4444'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke();
+            lastX = cx; lastY = cy;
+        });
+        window.addEventListener('mouseup', () => isDrawing = false);
+
+        document.getElementById('imageUploader').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const r = new FileReader();
+            r.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    window.clearCanvas();
+                    const ratio = Math.min(canvas.width / img.width, canvas.height / img.height);
+                    ctx.drawImage(img, (canvas.width - img.width * ratio)/2, (canvas.height - img.height * ratio)/2, img.width * ratio, img.height * ratio);
+                };
+                img.src = event.target.result;
+            };
+            r.readAsDataURL(file);
+        });
+
+        window.clearCanvas = () => ctx.clearRect(0, 0, canvas.width, canvas.height);
+        window.formatText = (cmd, val) => { document.execCommand(cmd, false, val || null); document.getElementById('modalRichText').focus(); };
+        window.openRichEdit = (idx, field) => {
+            if (window.items[idx].isDone) return;
+            window.editingIndex = idx;
+            window.editingField = field;
+            document.getElementById('modalTitle').innerText = field === 'richContent' ? "✎ Edit Issue Details" : "✎ Edit Decision Advanced";
+            document.getElementById('modalRichText').innerHTML = window.items[idx][field] || "";
+            document.getElementById('richModal').style.display = 'flex';
+            window.clearCanvas();
+        };
+        window.closeRichModal = () => document.getElementById('richModal').style.display = 'none';
+        window.insertAnnotatedImage = () => {
+            const imgTag = `<br><img src="${canvas.toDataURL('image/png')}" style="max-width:400px; border:2px solid #333; display:block; margin: 10px 0;"><br>`;
+            document.getElementById('modalRichText').focus(); document.execCommand('insertHTML', false, imgTag);
+        };
+        window.saveRichContent = () => {
+            if (window.editingIndex !== null && window.editingField) {
+                const item = window.items[window.editingIndex];
+                item[window.editingField] = document.getElementById('modalRichText').innerHTML;
+                window.saveItemToCloud(item);
+                window.closeRichModal();
+            }
+        };
+
+        /* ========= MAIN TABLE ENGINE ========= */
+        window.renderTable = () => {
+            const tbody = document.getElementById('item-tbody');
+            if (!tbody) return;
+            tbody.innerHTML = "";
+            window.items.forEach((item, idx) => {
+                const tr = document.createElement("tr");
+                tr.className = "transition-all align-top border-b " + (item.isDone ? "row-done bg-slate-50" : "hover:bg-slate-50/50");
+                const isDisabled = item.isDone ? "disabled" : "";
+                
+                let sevClass = "bg-slate-100 text-slate-700";
+                if (item.severity === "Critical") sevClass = "bg-red-100 text-red-700 font-bold";
+                else if (item.severity === "Major") sevClass = "bg-orange-100 text-orange-700 font-bold";
+
+                tr.innerHTML = `
+                    <td class="p-4 border text-center align-middle no-disable">
+                        <input type="checkbox" ${item.isDone ? "checked" : ""} onchange="window.toggleDone('${item.id}')" class="w-6 h-6 cursor-pointer accent-emerald-600 rounded shadow-sm">
+                    </td>
+                    <td class="p-4 border text-center font-bold text-slate-400 align-middle">${idx + 1}</td>
+                    
+                    <td class="p-4 border">
+                        <div class="flex justify-between items-center mb-3 no-disable">
+                            <input ${isDisabled} list="discipline-list" value="${item.disc || 'Mechanical'}" 
+                                onchange="window.updateLocalItem('${item.id}', 'disc', this.value)"
+                                class="text-[10px] text-blue-700 font-black bg-blue-50 px-3 py-1 rounded-full outline-none w-32 border-none focus:ring-1 focus:ring-blue-500 shadow-sm">
+                            <button ${isDisabled} onclick="window.openRichEdit(${idx}, 'richContent')" class="text-[10px] bg-slate-800 text-white px-2 py-1 rounded-lg font-bold shadow hover:bg-slate-700 transition-colors">✎ Edit Details</button>
+                        </div>
+                        <div class="rich-content-preview text-xs text-slate-800 border-t pt-4">
+                            ${item.richContent || '<span class="text-slate-400 italic font-medium">Click Edit to add technical data...</span>'}
+                        </div>
+                    </td>
+
+                    <td class="p-4 border text-center no-disable">
+                        <select ${isDisabled} onchange="window.updateLocalItem('${item.id}', 'severity', this.value)" class="text-xs p-2 rounded-lg w-full ${sevClass} outline-none cursor-pointer">
+                            <option value="Critical" ${item.severity==='Critical'?'selected':''}>CRITICAL</option>
+                            <option value="Major" ${item.severity==='Major'?'selected':''}>MAJOR</option>
+                            <option value="Minor" ${item.severity==='Minor'?'selected':''}>MINOR</option>
+                        </select>
+                    </td>
+
+                    <td class="p-4 border">
+                        <div class="flex justify-between items-center mb-3 no-disable">
+                             <span class="text-[9px] text-slate-400 font-black uppercase tracking-widest">Hybrid Editor</span>
+                             <button ${isDisabled} onclick="window.openRichEdit(${idx}, 'conclusion')" class="text-[10px] bg-blue-600 text-white px-2 py-1 rounded-lg font-bold shadow hover:bg-blue-700 transition-colors">✎ Adv. Edit</button>
+                        </div>
+                        <div id="inline-conc-${item.id}" 
+                             contenteditable="${!item.isDone}" 
+                             onblur="window.updateLocalItem('${item.id}', 'conclusion', this.innerHTML)"
+                             class="rich-content-preview text-xs text-slate-800 border-t pt-4 outline-none editable-cell font-medium">
+                            ${item.conclusion || '<span class="text-slate-400 italic">No decision recorded...</span>'}
+                        </div>
+                    </td>
+
+                    <td class="p-4 border text-center no-disable align-middle">
+                        <div class="flex flex-col items-center">
+                            <div class="bg-white rounded-xl border border-slate-200 p-2 shadow-sm inline-flex items-center">
+                                <input ${isDisabled} type="number" min="0" max="100" value="${item.progress || 0}" onchange="window.updateLocalItem('${item.id}', 'progress', this.value)" class="w-14 text-center text-sm font-black text-emerald-700 bg-transparent outline-none">
+                                <span class="text-xs font-bold text-slate-400 ml-1">%</span>
+                            </div>
+                            <!-- Bar Bar Progress Indicator -->
+                            <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden shadow-inner">
+                                <div class="bg-blue-500 h-full transition-all duration-700" style="width: ${item.progress || 0}%"></div>
+                            </div>
+                        </div>
+                    </td>
+
+                    <td class="p-4 border no-disable">
+                        <input ${isDisabled} value="${item.pic || ""}" onchange="window.updateLocalItem('${item.id}', 'pic', this.value)" class="w-full text-xs font-black border-b border-slate-200 bg-transparent outline-none mb-3 py-1 focus:border-blue-500" placeholder="Assigned to...">
+                        <input ${isDisabled} type="date" value="${item.deadline || ""}" onchange="window.updateLocalItem('${item.id}', 'deadline', this.value)" class="w-full text-[10px] text-slate-500 bg-transparent font-bold">
+                    </td>
+                    <td class="p-4 border text-center no-disable align-middle">
+                        <button onclick="window.removeItem('${item.id}')" class="text-slate-300 hover:text-red-500 p-2 transition-all hover:scale-125">✕</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        };
+
+        window.addRow = async () => {
+            if (!userId) return;
+            const id = db.collection('dummy').doc().id;
+            const newItem = { id, disc: "Mechanical", severity: "Minor", conclusion: "", progress: 0, isDone: false, pic: "", deadline: "", richContent: "", createdAt: Date.now() };
+            await window.saveItemToCloud(newItem);
+        };
+        window.toggleDone = async (id) => {
+            const item = window.items.find(i => i.id === id);
+            if (item) {
+                item.isDone = !item.isDone;
+                if (item.isDone) item.progress = 100;
+                await window.saveItemToCloud(item);
+            }
+        };
+        window.removeItem = async (id) => { if (confirm("Delete this?")) await window.deleteItemFromCloud(id); };
+        window.updateLocalItem = async (id, key, val) => {
+            const item = window.items.find(i => i.id === id);
+            if (item) {
+                if (key === 'progress') val = Math.min(100, Math.max(0, parseInt(val) || 0));
+                if (key === 'conclusion' && val.includes('italic')) val = "";
+                item[key] = val;
+                await window.saveItemToCloud(item);
+            }
+        };
+
+        /* ========= ANALYTICS ENGINE ========= */
+        window.updateCharts = () => {
+            if (typeof Chart === 'undefined') return;
+            const sev = { Critical: 0, Major: 0, Minor: 0 }, disc = {};
+            const unfinishedByPIC = {};
+
+            window.items.forEach(i => { 
+                if (sev[i.severity] !== undefined) sev[i.severity]++; 
+                const d = i.disc || 'General';
+                if (!disc[d]) disc[d] = 0;
+                disc[d]++;
+
+                if (!i.isDone) {
+                    const picName = i.pic || "Unassigned";
+                    if (!unfinishedByPIC[picName]) unfinishedByPIC[picName] = [];
+                    unfinishedByPIC[picName].push(i);
+                }
+            });
+
+            // Update Gantt Table
+            const ganttBody = document.getElementById('gantt-summary-body');
+            if (ganttBody) {
+                ganttBody.innerHTML = "";
+                const picKeys = Object.keys(unfinishedByPIC).sort();
+                if (picKeys.length === 0) {
+                    ganttBody.innerHTML = `<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Zero pending items. System Reliability: High.</td></tr>`;
+                } else {
+                    picKeys.forEach(pic => {
+                        const tasks = unfinishedByPIC[pic];
+                        let taskHtml = `<div class="space-y-4">`;
+                        tasks.forEach(t => {
+                            const taskName = t.richContent.replace(/<[^>]*>/g, '').substring(0, 90) || "Task with photos...";
+                            taskHtml += `
+                                <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="text-xs font-bold text-slate-700 truncate w-3/4">${taskName}</span>
+                                        <span class="text-[10px] font-black text-blue-600">${t.progress}%</span>
+                                    </div>
+                                    <div class="gantt-bar-bg"><div class="gantt-bar-fill" style="width: ${t.progress}%"></div></div>
+                                </div>`;
+                        });
+                        taskHtml += `</div>`;
+                        const row = document.createElement('tr');
+                        row.innerHTML = `<td class="p-4 align-top font-black text-slate-800 border-r border-slate-100 bg-slate-50/50">${pic}</td><td class="p-4 align-top">${taskHtml}</td><td class="p-4 align-top text-center font-black text-blue-900 bg-blue-50/20">${tasks.length}</td>`;
+                        ganttBody.appendChild(row);
+                    });
+                }
+            }
+
+            // Pie/Bar Charts
+            const cSev = document.getElementById('chartSeverity'), cDisc = document.getElementById('chartDiscipline');
+            if (cSev) { if (window.sevChartInstance) window.sevChartInstance.destroy(); window.sevChartInstance = new Chart(cSev, { type: "doughnut", data: { labels: Object.keys(sev), datasets: [{ data: Object.values(sev), backgroundColor: ["#EF4444", "#F59E0B", "#94A3B8"], borderWidth: 6, borderColor: "#fff" }] }, options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { weight: 'bold' } } } } } }); }
+            if (cDisc) { if (window.discChartInstance) window.discChartInstance.destroy(); window.discChartInstance = new Chart(cDisc, { type: "bar", data: { labels: Object.keys(disc), datasets: [{ label: 'Items Count', data: Object.values(disc), backgroundColor: "#3B82F6", borderRadius: 8 }] }, options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, font: { weight: 'bold' } } }, x: { grid: { display: false }, ticks: { font: { weight: 'bold' } } } }, plugins: { legend: { display: false } } } }); }
+        };
+
+        window.switchTab = (t) => {
+            document.getElementById("section-editor").classList.toggle("hidden", t !== "editor");
+            document.getElementById("section-analytics").classList.toggle("hidden", t !== "analytics");
+            const btnEditor = document.getElementById("btn-editor"), btnAnalytics = document.getElementById("btn-analytics");
+            btnEditor.className = (t === "editor" ? "border-b-2 border-blue-400 py-1 font-bold text-white transition-all shadow-sm" : "text-slate-300 py-1 hover:text-white transition-all font-semibold");
+            btnAnalytics.className = (t === "analytics" ? "border-b-2 border-blue-400 py-1 font-bold text-white transition-all shadow-sm" : "text-slate-300 py-1 hover:text-white transition-all font-semibold");
+            if (t === "analytics") window.updateCharts();
+        };
+
+        /* ========= PDF EXPORT ENGINE (A4 Optimized) ========= */
+        window.exportToMOM = function() {
+            const loading = document.getElementById('loadingOverlay');
+            loading.style.display = 'flex';
+            document.getElementById('loadingText').innerText = "Generating Professional PDF Report...";
+            
+            const project = document.getElementById('in-project').value, momNo = document.getElementById('in-mom-no').value, date = document.getElementById('in-date').value, attendees = document.getElementById('in-attendees').value, location = document.getElementById('in-location').value;
+
+            let itemsHtml = '';
+            window.items.forEach((i, idx) => {
+                const color = i.severity === 'Critical' ? '#EF4444' : '#111827';
+                itemsHtml += `
+                    <tr style="border-bottom: 1px solid #222; page-break-inside: avoid; ${i.isDone ? 'opacity: 0.7; background-color:#f9fafb;' : ''}">
+                        <td style="padding: 10px; text-align: center; border: 1px solid #444; font-weight:bold; width: 35px; font-size:10px;">${idx + 1}</td>
+                        <td style="padding: 10px; border: 1px solid #444; width: 220px; word-break: break-word;">
+                            <small style="color:#2563EB; font-weight:800; display:block; margin-bottom:4px; text-transform:uppercase; font-size:7px;">${i.disc || 'General'}</small>
+                            <div style="font-size: 9px; line-height:1.5; color:#111;">${i.isDone ? '<b style="color:#10B981;">[COMPLETED]</b> ' : ''}${i.richContent || '-'}</div>
+                        </td>
+                        <td style="padding: 8px; border: 1px solid #444; color: ${color}; font-weight:bold; text-align:center; font-size:8px; width: 60px;">${i.severity.toUpperCase()}</td>
+                        <td style="padding: 10px; border: 1px solid #444; width: 220px; word-break: break-word;">
+                            <div style="font-size: 9px; line-height:1.5; color:#111;">${i.conclusion || '-'}</div>
+                        </td>
+                        <td style="padding: 8px; border: 1px solid #444; width: 60px; text-align:center;">
+                            <div style="font-size: 9px; font-weight:bold;">${i.progress || 0}%</div>
+                            <div style="width:100%; height:4px; background:#eee; border-radius:2px; margin-top:3px; overflow:hidden;">
+                                <div style="width:${i.progress || 0}%; height:100%; background:#3b82f6;"></div>
+                            </div>
+                        </td>
+                        <td style="padding: 10px; border: 1px solid #444; font-size: 9px; line-height:1.4; width: 100px;">
+                            <span style="font-weight:bold; display:block;">${i.pic || '-'}</span>
+                            <small style="color:#444; font-size:7px;">Target: ${i.deadline || 'N/A'}</small>
+                        </td>
+                    </tr>`;
+            });
+
+            const content = `
+                <div id="pdf-content" style="padding: 15px; color: #111; background: #fff; width: 100%; box-sizing: border-box; font-family: sans-serif;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 3px solid #2563EB; padding-bottom: 15px;">
+                        <div style="max-width: 65%;">
+                            <h1 style="font-size: 22px; font-weight: 800; margin: 0; color: #111; letter-spacing:-0.5px">MEETING MINUTES / 議事録</h1>
+                            <p style="margin: 5px 0 0 0; color: #2563EB; font-size: 11px; font-weight:800; text-transform:uppercase;">TECHNICAL & MAINTENANCE STRATEGY</p>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <div style="width:70px;height:70px;border:1.5px solid #222;display:flex;flex-direction:column;align-items:center;justify-content:center; background:#fcfcfc;"><small style="font-size:8px; font-weight:800;">APPROVED</small><div style="width:35px;height:35px;border:1px dashed #ccc;border-radius:50%; margin-top:5px"></div></div>
+                            <div style="width:70px;height:70px;border:1.5px solid #222;display:flex;flex-direction:column;align-items:center;justify-content:center; background:#fcfcfc;"><small style="font-size:8px; font-weight:800;">REVIEW</small><div style="width:35px;height:35px;border:1px dashed #ccc;border-radius:50%; margin-top:5px"></div></div>
+                            <div style="width:70px;height:70px;border:1.5px solid #222;display:flex;flex-direction:column;align-items:center;justify-content:center; background:#fcfcfc;"><small style="font-size:8px; font-weight:800;">PREPARED</small><div style="width:35px;height:35px;border:1px dashed #ccc;border-radius:50%; margin-top:5px"></div></div>
+                        </div>
+                    </div>
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 11px; border: 1.5px solid #222;">
+                        <tr><td style="padding: 8px; border: 1px solid #444; background: #f4f7ff; width: 25%; font-weight: 800;">Project Name</td><td style="padding: 8px; border: 1px solid #444;">${project}</td><td style="padding: 8px; border: 1px solid #444; background: #f4f7ff; width: 15%; font-weight: 800;">MOM No.</td><td style="padding: 8px; border: 1px solid #444;">${momNo}</td></tr>
+                        <tr><td style="padding: 8px; border: 1px solid #444; background: #f4f7ff; font-weight: 800;">Date / Location</td><td style="padding: 8px; border: 1px solid #444;">${date} / ${location}</td><td style="padding: 8px; border: 1px solid #444; background: #f4f7ff; font-weight: 800;">Attendees</td><td style="padding: 8px; border: 1px solid #444;">${attendees}</td></tr>
+                    </table>
+                    <h3 style="border-left: 10px solid #2563EB; padding-left: 10px; font-size: 14px; margin-bottom: 12px; font-weight:800; color:#111; text-transform:uppercase;">Detailed Action Summary / 協議事項</h3>
+                    <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #222;">
+                        <thead style="background: #e5e7eb;"><tr><th style="padding: 10px; border: 1px solid #444; font-weight:800; text-align:center; width:35px;">NO</th><th style="padding: 10px; border: 1px solid #444; text-align:left; width:210px;">TECHNICAL ISSUE & EVIDENCE</th><th style="padding: 10px; border: 1px solid #444; text-align:center; width:65px;">LEVEL</th><th style="padding: 10px; border: 1px solid #444; text-align:left; width:210px;">DECISION / CONCLUSION</th><th style="padding: 10px; border: 1px solid #444; text-align:center; width:60px;">DONE</th><th style="padding: 10px; border: 1px solid #444; text-align:left; width:95px;">RESPONSIBLE</th></tr></thead>
+                        <tbody>${itemsHtml}</tbody>
+                    </table>
+                    <div style="margin-top: 40px; border-top: 1.5px solid #222; padding-top: 15px; font-size: 10px; color: #111; text-align: center; font-style:italic; font-weight:700;">ISO 9001:2015 Quality & ISO 55001 Asset Integrity Framework. Verification System Record.</div>
+                </div>`;
+
+            const opt = { margin: [10, 10, 10, 10], filename: `${getBaseFilename()}.pdf`, image: { type: 'jpeg', quality: 1 }, html2canvas: { scale: 2.5, useCORS: true, letterRendering: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } };
+            html2pdf().set(opt).from(content).save().then(() => { loading.style.display = 'none'; });
+        };
+
+        /* ========= ONLOAD ========= */
+        document.addEventListener('DOMContentLoaded', () => {
+            initSync();
+        });
+    </script>
 </body>
 </html>
